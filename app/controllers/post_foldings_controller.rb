@@ -10,17 +10,21 @@ class PostFoldingsController < ::ApplicationController
     return render_fail "post_foldings.no_fold_first" if post.post_number == 1
     return render_fail "post_foldings.not_enabled_in_topic" unless TopicFoldingStatus.enabled?(post.topic.id)
     if FoldedPost.folded?(post.id)
-      unless guardian.can_unfold_post?(post)
-        return render_fail "post_foldings.not_cooled_down", status: 403 unless FoldedPost.cooled_down?(post.id)
+      unless guardian.can_fold_post?(post)
         return render_fail "post_foldings.no_perm", status: 403
+      end
+      unless guardian.post_folding_is_colded_post_now?(post)
+        return render_fail "post_foldings.not_cooled_down", status: 403
       end
       FoldedPost.unfold_post(post.id)
       StaffActionLogger.new(guardian.user).log_custom(:fold_post, post_id: post.id)
       render json: { succeed: true, folded: true }
     else
       unless guardian.can_fold_post?(post)
-        return render_fail "post_foldings.not_cooled_down", status: 403 unless FoldedPost.cooled_down?(post.id)
         return render_fail "post_foldings.no_perm", status: 403
+      end
+      unless guardian.post_folding_is_colded_post_now?(post)
+        return render_fail "post_foldings.not_cooled_down", status: 403
       end
       FoldedPost.fold_post(post.id, guardian.user.id)
       StaffActionLogger.new(guardian.user).log_custom(:unfold_post, post_id: post.id)
@@ -48,8 +52,10 @@ class PostFoldingsController < ::ApplicationController
     topic = Topic.find_by(id:)
     guardian.ensure_can_see_topic!(topic)
     unless guardian.can_change_topic_post_folding?(topic)
-      return render_fail "post_foldings.not_cooled_down", status: 403 unless TopicFoldingStatus.cooled_down?(topic.id)
       return render_fail "post_foldings.no_perm", status: 403
+    end
+    unless guardian.post_folding_is_colded_topic_now?(topic)
+      return render_fail "post_foldings.not_cooled_down", status: 403
     end
     if en
       TopicFoldingStatus.enable topic.id, guardian.user.id

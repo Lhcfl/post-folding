@@ -100,7 +100,14 @@ function init(api) {
     } else return;
   });
 
-  api.includePostAttributes("folded_by", "in_folding_enabled_topic", "in_folding_capable_topic");
+  api.includePostAttributes(
+    "folded_by",
+    "in_folding_enabled_topic",
+    "in_folding_capable_topic",
+    "can_fold",
+    "folded_time",
+    "can_change_topic_post_folding"
+  );
 
   api.addPostClassesCallback((attrs) => {
     // Not folded
@@ -125,10 +132,7 @@ function init(api) {
     if (post.in_folding_enabled_topic !== true) {
       return;
     }
-    if ((post.user_id !== curUser.id || !post.canEdit) && !curUser.can_manipulate_post_foldings) {
-      return;
-    }
-    if (post.locked && !curUser.staff) {
+    if (!post.can_fold) {
       return;
     }
     if (post.deleted_at || post.post_number === 1) {
@@ -164,10 +168,7 @@ function init(api) {
     if (post.deleted_at) {
       return;
     }
-    if ((post.user_id !== curUser.id || !post.canEdit) && !curUser.can_manipulate_post_foldings) {
-      return;
-    }
-    if (!post.in_folding_capable_topic && !curUser.can_manipulate_post_foldings) {
+    if (!post.can_change_topic_post_folding) {
       return;
     }
 
@@ -203,10 +204,12 @@ function init(api) {
         if (post.folded_by) {
           post.setProperties({
             folded_by: null,
+            folded_time: new Date().toISOString(),
           });
         } else {
           post.setProperties({
             folded_by: curUser,
+            folded_time: new Date().toISOString(),
           });
         }
         helper.appEvents.trigger("post-stream:refresh", {
@@ -247,6 +250,10 @@ function init(api) {
       .catch(popupAjaxError);
   }
 
+  function checkUnCold(timeStr, second) {
+    return (new Date() - new Date(timeStr)) / 1000 < second;
+  }
+
   // Arrow functions won't take this, so use functions
   api.attachWidgetAction("post", "toggleFolding", function () {
     const helper = this;
@@ -256,7 +263,13 @@ function init(api) {
     const helper = this;
     const post = helper.model;
     // Only show modal when post is folded
-    if (post.folded_by || curUser.siteSettings?.post_folding_disable_confirm) {
+    if (
+      curUser.siteSettings?.post_folding_disable_confirm ||
+      checkUnCold(
+        post.folded_time,
+        post.folded_by ? curUser.siteSettings?.unfold_post_cooldown : curUser.siteSettings?.fold_post_cooldown
+      )
+    ) {
       toggleFolding(helper);
     } else {
       getOwner(helper)

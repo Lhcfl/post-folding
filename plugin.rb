@@ -63,26 +63,27 @@ after_initialize do
     end
   end
 
+  add_to_class(:guardian, :post_folding_is_colded_post_now?) do |post|
+    return true if user&.can_manipulate_post_foldings?
+    FoldedPost.cooled_down?(post.id) || user&.id != FoldedPost.find_by(id: post.id)&.folded_by_id
+  end
   add_to_class(:guardian, :can_fold_post?) do |post|
     return false if post.locked? && !is_staff?
     return false if user&.banned_for_post_foldings?
     return true if user&.can_manipulate_post_foldings?
     return false unless is_my_own?(post) && can_edit?(post)
-    FoldedPost.cooled_down?(post.id) && FoldedPost.find_by(id: post.id)&.folded_by_id.nil?
+    post_folded_by_id = FoldedPost.find_by(id: post.id)&.folded_by_id
+    post_folded_by_id.nil? || post.user.id == post_folded_by_id
   end
-  add_to_class(:guardian, :can_unfold_post?) do |post|
-    return false if post.locked? && !is_staff?
-    return false if user&.banned_for_post_foldings?
+  add_to_class(:guardian, :post_folding_is_colded_topic_now?) do |topic|
     return true if user&.can_manipulate_post_foldings?
-    return false unless is_my_own?(post) && can_edit?(post)
-    FoldedPost.cooled_down?(post.id) && post.user.id == FoldedPost.find_by(id: post.id)&.folded_by_id
+    TopicFoldingStatus.cooled_down?(topic.id) || user.id != TopicFoldingStatus.find_by(id: topic.id)&.enabled_by_id
   end
   add_to_class(:guardian, :can_change_topic_post_folding?) do |topic|
     return false if user&.banned_for_post_foldings?
     return true if user&.can_manipulate_post_foldings?
     return false if topic.archived?
     return false unless is_my_own?(topic) && can_edit?(topic) && topic.folding_capable?
-    return false unless TopicFoldingStatus.cooled_down?(topic.id)
     info = TopicFoldingStatus.find_by(id: topic.id)
     info&.enabled_by_id.nil? || user.id == info.enabled_by_id
   end
@@ -115,7 +116,7 @@ after_initialize do
   end
 
   add_to_serializer(:post, :can_fold) { scope.can_fold_post?(object) }
-  add_to_serializer(:post, :can_unfold) { scope.can_unfold_post?(object) }
+  add_to_serializer(:post, :folded_time) { FoldedPost.folded_time?(id) }
   add_to_serializer(:post, :in_folding_enabled_topic) { !@topic.folding_enabled_by.nil? }
   add_to_serializer(:topic_view, :folding_enabled_by) do
     BasicUserSerializer.new(topic.folding_enabled_by, root: false).as_json

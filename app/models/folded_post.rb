@@ -14,6 +14,12 @@ class FoldedPost < ActiveRecord::Base
     Time.now >= data.changed_at + cd
   end
 
+  def self.folded_time?(id)
+    data = self.find_by(id:)
+    return nil if data.nil?
+    data.changed_at
+  end
+
   def self.fold_post(id, folded_by_id)
     if self.exists?(id:)
       self.find_by(id:).update!(folded_by_id: folded_by_id, changed_at: Time.now)
